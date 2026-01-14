@@ -20,7 +20,7 @@ load_dotenv()
 DEFAULT_CONFIG_PATH = Path(__file__).parent / "defaults.json"
 
 
-def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+def deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
     """
     Deep merge two dictionaries, with override taking precedence.
     
@@ -35,11 +35,15 @@ def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any
     
     for key, value in override.items():
         if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-            result[key] = _deep_merge(result[key], value)
+            result[key] = deep_merge(result[key], value)
         else:
             result[key] = value
     
     return result
+
+
+# Keep _deep_merge as alias for backward compatibility
+_deep_merge = deep_merge
 
 
 def _load_env_overrides() -> Dict[str, Any]:

@@ -60,7 +60,7 @@
   },
   "logging": {
     "level": "INFO",
-    "format": "json",
+    "format": "simple",
     "file_path": null,
     "console_enabled": true,
     "file_enabled": false,

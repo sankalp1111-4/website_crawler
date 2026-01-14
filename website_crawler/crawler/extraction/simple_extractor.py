@@ -5,6 +5,9 @@ This module provides a minimal content extraction using HTML parser.
 """
 from typing import Dict, Any
 from ..parsing.html_parser import HTMLParser
+from utils.logging_config import ComponentLoggerAdapter, get_component_logger
+
+logger: ComponentLoggerAdapter = get_component_logger("SimpleExtractor", __name__)
 
 
 class SimpleExtractor:
@@ -35,7 +38,7 @@ class SimpleExtractor:
         Returns:
             Dictionary with extracted content (text, links, title, metadata)
         """
-        # Use HTML parser to extract all content
+        # Use HTML parser to extract all content (parsing logs internally)
         parsed_data = self.html_parser.parse(html, url)
         
         return {

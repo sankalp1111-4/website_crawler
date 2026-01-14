@@ -1,7 +1,7 @@
 """
 Pydantic models for configuration validation.
 """
-from typing import Dict, List, Optional, Literal
+from typing import Any, Dict, List, Optional, Literal
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -19,6 +19,9 @@ class CrawlerConfig(BaseModel):
     max_html_size: int = Field(default=16777216, ge=1024, description="Maximum HTML size in bytes (default: 16MB)")
     reject_empty_content: bool = Field(default=True, description="Reject documents with empty content")
     log_empty_content_warning: bool = Field(default=True, description="Log warning for empty content even if not rejected")
+    allowed_domains: Optional[List[str]] = Field(default=None, description="List of allowed domains (None = all allowed)")
+    blocked_domains: Optional[List[str]] = Field(default=None, description="List of blocked domains")
+    exclude_patterns: List[str] = Field(default_factory=list, description="URL patterns to exclude from crawling")
     
     model_config = {"frozen": True}
 
@@ -142,8 +145,8 @@ class LoggingConfig(BaseModel):
         default="INFO",
         description="Logging level"
     )
-    format: Literal["json", "text", "detailed"] = Field(
-        default="json",
+    format: Literal["json", "text", "simple", "detailed"] = Field(
+        default="simple",
         description="Log format type"
     )
     file_path: Optional[str] = Field(default=None, description="Log file path")
@@ -169,3 +172,119 @@ class MainConfig(BaseModel):
     client_id: Optional[str] = Field(default=None, description="Client identifier for multi-tenant support")
     
     model_config = {"frozen": True}
+    
+    def validate_config(self) -> None:
+        """
+        Perform comprehensive configuration validation.
+        
+        Raises:
+            ConfigurationValidationError: If validation fails
+        """
+        # Import here to avoid circular dependencies
+        try:
+            from ..crawler.exceptions import ConfigurationValidationError
+        except ImportError:
+            # Fallback for absolute import if relative doesn't work
+            from website_crawler.crawler.exceptions import ConfigurationValidationError
+        
+        # Validate crawler config dependencies
+        if self.crawler.max_depth < 1:
+            raise ConfigurationValidationError(
+                "crawler.max_depth must be >= 1",
+                config_key="crawler.max_depth"
+            )
+        
+        if self.crawler.max_pages < 1:
+            raise ConfigurationValidationError(
+                "crawler.max_pages must be >= 1",
+                config_key="crawler.max_pages"
+            )
+        
+        # Validate storage config
+        if self.storage.type == "mongodb":
+            if not self.storage.connection_string:
+                raise ConfigurationValidationError(
+                    "storage.connection_string is required for MongoDB storage",
+                    config_key="storage.connection_string"
+                )
+        
+        # Validate strategy config
+        if self.strategy.max_depth is not None:
+            if self.strategy.max_depth < 1:
+                raise ConfigurationValidationError(
+                    "strategy.max_depth must be >= 1 if specified",
+                    config_key="strategy.max_depth"
+                )
+            if self.strategy.max_depth > self.crawler.max_depth:
+                raise ConfigurationValidationError(
+                    f"strategy.max_depth ({self.strategy.max_depth}) cannot exceed "
+                    f"crawler.max_depth ({self.crawler.max_depth})",
+                    config_key="strategy.max_depth"
+                )
+        
+        if self.strategy.max_pages is not None:
+            if self.strategy.max_pages < 1:
+                raise ConfigurationValidationError(
+                    "strategy.max_pages must be >= 1 if specified",
+                    config_key="strategy.max_pages"
+                )
+            if self.strategy.max_pages > self.crawler.max_pages:
+                raise ConfigurationValidationError(
+                    f"strategy.max_pages ({self.strategy.max_pages}) cannot exceed "
+                    f"crawler.max_pages ({self.crawler.max_pages})",
+                    config_key="strategy.max_pages"
+                )
+        
+        # Validate extraction config
+        if self.extraction.type not in ["css", "xpath", "llm", "auto"]:
+            raise ConfigurationValidationError(
+                f"extraction.type must be one of ['css', 'xpath', 'llm', 'auto'], "
+                f"got: {self.extraction.type}",
+                config_key="extraction.type"
+            )
+        
+        # Validate engine config
+        if self.engine.viewport_width < 320 or self.engine.viewport_width > 7680:
+            raise ConfigurationValidationError(
+                f"engine.viewport_width must be between 320 and 7680, got: {self.engine.viewport_width}",
+                config_key="engine.viewport_width"
+            )
+        
+        if self.engine.viewport_height < 240 or self.engine.viewport_height > 4320:
+            raise ConfigurationValidationError(
+                f"engine.viewport_height must be between 240 and 4320, got: {self.engine.viewport_height}",
+                config_key="engine.viewport_height"
+            )
+    
+    @classmethod
+    def from_dict(cls, config_dict: Dict[str, Any]) -> "MainConfig":
+        """
+        Create MainConfig from dictionary with validation.
+        
+        Args:
+            config_dict: Configuration dictionary
+            
+        Returns:
+            Validated MainConfig instance
+            
+        Raises:
+            ConfigurationValidationError: If validation fails
+        """
+        try:
+            config = cls(**config_dict)
+            config.validate_config()
+            return config
+        except Exception as e:
+            # Import here to avoid circular dependencies
+            try:
+                from ..crawler.exceptions import ConfigurationValidationError
+            except ImportError:
+                # Fallback for absolute import if relative doesn't work
+                from website_crawler.crawler.exceptions import ConfigurationValidationError
+            
+            if isinstance(e, ConfigurationValidationError):
+                raise
+            raise ConfigurationValidationError(
+                f"Invalid configuration: {str(e)}",
+                context={"original_error": str(e)}
+            ) from e

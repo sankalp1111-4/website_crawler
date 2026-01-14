@@ -48,6 +48,18 @@ Feature-rich crawler with multiple strategies, extractors, markdown conversion, 
     - Document chunking
     - Batch processing
 
+11. **TASK_11**: Session Management (from Phase 2)
+    - Cookie management
+    - Session persistence
+    - Per-domain sessions
+    - **Note**: Implemented at the end after all other methods are complete and tested end-to-end
+
+12. **TASK_12**: Headers & Proxies (from Phase 2)
+    - Custom headers
+    - Proxy support
+    - Proxy rotation
+    - **Note**: Depends on Session Management, so implemented after TASK_11
+
 ## Implementation Order
 
 ```
@@ -61,6 +73,8 @@ TASK_01 (Strategy Base)
   → TASK_08 (LLM Extractor)
   → TASK_09 (Markdown Conversion)
   → TASK_10 (Chunking & Batching)
+  → TASK_11 (Session Management) [Deferred from Phase 2]
+  → TASK_12 (Headers & Proxies) [Deferred from Phase 2, depends on TASK_11]
 ```
 
 ## Success Criteria
@@ -74,6 +88,9 @@ TASK_01 (Strategy Base)
 - [ ] Batch processing works
 - [ ] System is extensible with new strategies/extractors
 - [ ] Advanced features integrate well with existing system
+- [ ] Session management works correctly (end of Phase 3)
+- [ ] Headers and proxies work correctly (end of Phase 3)
+- [ ] All methods tested end-to-end before session management and headers/proxies
 
 ## Notes
 

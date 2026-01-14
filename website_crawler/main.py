@@ -11,6 +11,13 @@ from fastapi.responses import JSONResponse
 import uvicorn
 
 from controller import router as crawl_router
+from config.loader import load_config
+from utils.logging_config import configure_logger_from_config
+
+# Load configuration and initialize logging
+_config = load_config()
+config_dict = _config.model_dump() if hasattr(_config, 'model_dump') else dict(_config)
+configure_logger_from_config(config_dict)
 
 # Initialize FastAPI app
 app = FastAPI(

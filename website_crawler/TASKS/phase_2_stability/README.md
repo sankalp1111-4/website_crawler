@@ -20,15 +20,17 @@ Robust crawler with proper error handling, validation, logging, and observabilit
    - Rate limiting
    - Concurrent request limits
 
-3. **TASK_03**: Session Management
+3. **TASK_03**: Session Management ⏸️ DEFERRED
    - Cookie management
    - Session persistence
    - Per-domain sessions
+   - **Note**: Will be implemented at the end of Phase 3 after all other methods are complete and tested
 
-4. **TASK_04**: Headers & Proxies
+4. **TASK_04**: Headers & Proxies ⏸️ DEFERRED
    - Custom headers
    - Proxy support
    - Proxy rotation
+   - **Note**: Depends on TASK_03 (Session Management), so also deferred to end of Phase 3
 
 5. **TASK_05**: Enhanced Error Handling
    - Expanded exception hierarchy
@@ -52,9 +54,7 @@ Robust crawler with proper error handling, validation, logging, and observabilit
 ```
 TASK_01 (URL Filtering)
   → TASK_02 (Performance Settings)
-  → TASK_03 (Session Management)
-  → TASK_04 (Headers & Proxies)
-  → TASK_05 (Enhanced Error Handling)
+  → TASK_05 (Enhanced Error Handling)  [Skip TASK_03 & TASK_04 - deferred to end of Phase 3]
   → TASK_06 (Enhanced Validation)
   → TASK_07 (Logging & Observability)
 ```

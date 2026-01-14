@@ -11,8 +11,9 @@ from html import unescape
 
 from ..url.normalizer import resolve_relative_url
 from ..exceptions import CrawlError
+from utils.logging_config import ComponentLoggerAdapter, get_component_logger
 
-logger = logging.getLogger(__name__)
+logger: ComponentLoggerAdapter = get_component_logger("HTMLParser", __name__)
 
 
 class HTMLParser:
@@ -42,17 +43,28 @@ class HTMLParser:
         Returns:
             Dictionary with extracted data (text, links, title, metadata)
         """
-        text = self.extract_text(html)
-        links = self.extract_links(html, url)
-        title = self.extract_title(html)
-        metadata = self.extract_metadata(html)
+        url_logger = logger.with_url(url)
         
-        return {
-            'text': text,
-            'links': links,
-            'title': title,
-            'metadata': metadata
-        }
+        with url_logger.component_flow("parse", url=url, html_length=len(html) if html else 0):
+            # Extract components (no individual logging - too granular)
+            text = self.extract_text(html)
+            links = self.extract_links(html, url)
+            title = self.extract_title(html)
+            metadata = self.extract_metadata(html)
+            
+            result = {
+                'text': text,
+                'links': links,
+                'title': title,
+                'metadata': metadata
+            }
+            
+            # Log in simple format: [HTMLParser] Parsed HTML → text=139 chars, links=1
+            text_len = len(text)
+            links_count = len(links)
+            url_logger.info(f"[HTMLParser] Parsed HTML → text={text_len} chars, links={links_count}")
+            
+            return result
     
     def extract_text(self, html: str) -> str:
         """
@@ -86,7 +98,7 @@ class HTMLParser:
             return text
         except Exception as e:
             error_msg = f"Failed to extract text from HTML: {str(e)}"
-            logger.error(error_msg, exc_info=True)
+            logger.error(f"[HTMLParser] {error_msg}", exc_info=True)
             # Return empty string as fallback, but log the error
             # The orchestrator will handle empty content validation
             return ""

@@ -1,11 +1,16 @@
 # TASK 04: Headers & Proxies
 
+## ⏸️ STATUS: DEFERRED TO END OF PHASE 3
+**This task depends on TASK_03 (Session Management) and will be implemented at the end of Phase 3 after all other methods are complete and tested end-to-end.**
+
 ## Objective
 Implement custom HTTP headers management and proxy support for the crawler.
 
 ## Prerequisites
 - Phase 1 completed (Crawl4AI Engine)
-- TASK_03 completed (Session Management)
+- TASK_03 completed (Session Management) - **DEFERRED**
+- Phase 2 tasks completed (except TASK_03 & TASK_04)
+- Phase 3 tasks completed (all strategies, extractors, optimizations)
 
 ## Steps
 

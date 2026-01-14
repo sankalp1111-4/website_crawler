@@ -11,8 +11,9 @@ from pymongo.errors import ConnectionFailure, PyMongoError
 
 from .base import BaseStorage
 from crawler.exceptions import StorageError, StorageConnectionError, StorageSaveError
+from utils.logging_config import ComponentLoggerAdapter, get_component_logger
 
-logger = logging.getLogger(__name__)
+logger: ComponentLoggerAdapter = get_component_logger("MongoStorage", __name__)
 
 
 class MongoStorage(BaseStorage):
@@ -50,22 +51,40 @@ class MongoStorage(BaseStorage):
         Raises:
             StorageConnectionError: If connection fails
         """
+        logger.log_entry("connect", 
+                        database=self.database_name,
+                        collection=self.collection_name,
+                        connection_string=self.connection_string[:50] + "..." if len(self.connection_string) > 50 else self.connection_string)
+        
         try:
+            logger.log_decision("MONGO_CLIENT_CREATION", "Creating MongoDB client")
             self.client = MongoClient(
                 self.connection_string,
                 serverSelectionTimeoutMS=5000
             )
             # Test connection
+            logger.log_entry("ping_mongodb")
             self.client.admin.command('ping')
+            logger.log_decision("MONGO_PING_SUCCESS", "MongoDB ping successful")
+            logger.log_exit("ping_mongodb", status="success")
+            
             self.db = self.client[self.database_name]
             self.collection = self.db[self.collection_name]
+            logger.log_state_change("storage_disconnected", "storage_connected", 
+                                  database=self.database_name,
+                                  collection=self.collection_name)
+            logger.log_exit("connect", status="success")
             return True
         except ConnectionFailure as e:
+            logger.log_decision("MONGO_CONNECTION_FAILED", reason=str(e))
+            logger.log_exit("connect", status="failed", error=str(e))
             raise StorageConnectionError(
                 f"Failed to connect to MongoDB: {str(e)}",
                 connection_string=self.connection_string
             ) from e
         except Exception as e:
+            logger.log_decision("MONGO_CONNECTION_ERROR", reason=str(e))
+            logger.log_exit("connect", status="failed", error=str(e))
             raise StorageConnectionError(
                 f"Unexpected error connecting to MongoDB: {str(e)}",
                 connection_string=self.connection_string
@@ -73,11 +92,19 @@ class MongoStorage(BaseStorage):
     
     def disconnect(self) -> None:
         """Close connection to MongoDB."""
+        logger.log_entry("disconnect", has_client=bool(self.client))
+        
         if self.client:
+            logger.log_decision("MONGO_DISCONNECT", "Closing MongoDB connection")
             self.client.close()
             self.client = None
             self.db = None
             self.collection = None
+            logger.log_state_change("storage_connected", "storage_disconnected")
+            logger.log_exit("disconnect", status="success")
+        else:
+            logger.log_decision("MONGO_ALREADY_DISCONNECTED", "Already disconnected")
+            logger.log_exit("disconnect", status="already_disconnected")
     
     def save(self, document: Dict[str, Any]) -> bool:
         """
@@ -93,57 +120,70 @@ class MongoStorage(BaseStorage):
             StorageSaveError: If save fails
         """
         if self.collection is None:
+            logger.log_decision("STORAGE_NOT_CONNECTED", "Not connected to MongoDB")
             raise StorageError("Not connected to MongoDB. Call connect() first.")
         
-        try:
-            # Use document_id as _id
-            document_id = document.get('document_id') or document.get('_id')
-            if not document_id:
-                raise StorageSaveError("Document must have a 'document_id' field")
-            
-            # Prepare document for MongoDB
-            mongo_doc = document.copy()
-            mongo_doc['_id'] = document_id
-            
-            # Validate document size before saving
-            # Estimate size by serializing to JSON
+        # Use document_id as _id
+        document_id = document.get('document_id') or document.get('_id')
+        
+        doc_logger = logger
+        if document_id:
+            doc_logger = logger.with_request_id(document_id)
+        
+        with doc_logger.component_flow("save", document_id=document_id):
             try:
-                document_json = json.dumps(mongo_doc, default=str)
-                document_size = len(document_json.encode('utf-8'))
+                if not document_id:
+                    doc_logger.log_decision("DOCUMENT_ID_MISSING", "Document must have a 'document_id' field")
+                    raise StorageSaveError("Document must have a 'document_id' field")
                 
-                if document_size > self.max_document_size:
-                    error_msg = (
-                        f"Document size ({document_size} bytes) exceeds maximum allowed size "
-                        f"({self.max_document_size} bytes). Document ID: {document_id}"
-                    )
-                    logger.error(error_msg)
-                    raise StorageSaveError(error_msg, document_id=document_id)
+                # Prepare document for MongoDB
+                mongo_doc = document.copy()
+                mongo_doc['_id'] = document_id
                 
-                logger.debug(f"Document size validation passed: {document_size} bytes for document {document_id}")
-            except (TypeError, ValueError) as e:
-                # If JSON serialization fails, log warning but continue
-                logger.warning(f"Could not validate document size for {document_id}: {str(e)}")
-            
-            # Upsert document
-            self.collection.replace_one(
-                {'_id': document_id},
-                mongo_doc,
-                upsert=True
-            )
-            return True
-        except StorageSaveError:
-            # Re-raise StorageSaveError as-is
-            raise
-        except PyMongoError as e:
-            raise StorageSaveError(
-                f"Failed to save document: {str(e)}",
-                document_id=document.get('document_id')
-            ) from e
-        except Exception as e:
-            raise StorageSaveError(
-                f"Unexpected error saving document: {str(e)}",
-                document_id=document.get('document_id')
-            ) from e
+                # Validate document size before saving
+                # Estimate size by serializing to JSON
+                try:
+                    document_json = json.dumps(mongo_doc, default=str)
+                    document_size = len(document_json.encode('utf-8'))
+                    
+                    if document_size > self.max_document_size:
+                        error_msg = (
+                            f"Document size ({document_size} bytes) exceeds maximum allowed size "
+                            f"({self.max_document_size} bytes). Document ID: {document_id}"
+                        )
+                        doc_logger.log_decision("DOCUMENT_SIZE_EXCEEDED", reason=error_msg)
+                        raise StorageSaveError(error_msg, document_id=document_id)
+                except (TypeError, ValueError) as e:
+                    # If JSON serialization fails, log warning but continue
+                    doc_logger.warning(f"[MongoStorage] Could not validate document size for {document_id}: {str(e)}")
+                
+                # Upsert document
+                self.collection.replace_one(
+                    {'_id': document_id},
+                    mongo_doc,
+                    upsert=True
+                )
+                # Log in simple format: [MongoStorage] Saved document → doc_...
+                doc_logger.info(f"[MongoStorage] Saved document → {document_id[:20]}...")
+                return True
+            except StorageSaveError:
+                # Re-raise StorageSaveError as-is
+                doc_logger.log_exit("save", status="failed", error_type="StorageSaveError")
+                raise
+            except PyMongoError as e:
+                doc_logger.log_decision("MONGO_SAVE_ERROR", reason=str(e))
+                doc_logger.log_exit("save", status="failed", error=str(e))
+                raise StorageSaveError(
+                    f"Failed to save document: {str(e)}",
+                    document_id=document.get('document_id')
+                ) from e
+            except Exception as e:
+                doc_logger.log_decision("UNEXPECTED_SAVE_ERROR", reason=str(e))
+                doc_logger.log_exit("save", status="failed", error=str(e))
+                raise StorageSaveError(
+                    f"Unexpected error saving document: {str(e)}",
+                    document_id=document.get('document_id')
+                ) from e
     
     def get(self, document_id: str) -> Optional[Dict[str, Any]]:
         """
