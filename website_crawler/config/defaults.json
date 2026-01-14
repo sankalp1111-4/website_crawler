@@ -1,0 +1,71 @@
+{
+  "crawler": {
+    "max_depth": 3,
+    "max_pages": 100,
+    "delay": 1.0,
+    "timeout": 30,
+    "retries": 3,
+    "rate_limit": null,
+    "respect_robots_txt": true,
+    "follow_redirects": true,
+    "max_redirects": 5,
+    "max_html_size": 16777216,
+    "reject_empty_content": true,
+    "log_empty_content_warning": true
+  },
+  "engine": {
+    "headless": true,
+    "browser_type": "chromium",
+    "viewport_width": 1920,
+    "viewport_height": 1080,
+    "wait_for": null,
+    "wait_timeout": 30,
+    "js_enabled": true,
+    "images_enabled": true,
+    "css_enabled": true
+  },
+  "storage": {
+    "type": "mongodb",
+    "connection_string": "mongodb://localhost:27017",
+    "database": "crawler_db",
+    "collection": "crawled_pages",
+    "username": null,
+    "password": null,
+    "auth_source": null,
+    "max_pool_size": 100,
+    "max_document_size": 16777216
+  },
+  "extraction": {
+    "type": "css",
+    "selectors": {},
+    "extract_text": true,
+    "extract_links": true,
+    "extract_images": false,
+    "extract_metadata": true,
+    "clean_html": true
+  },
+  "strategy": {
+    "type": "bfs",
+    "max_depth": null,
+    "max_pages": null,
+    "priority_patterns": [],
+    "exclude_patterns": []
+  },
+  "auth": {
+    "headers": {},
+    "cookies": {},
+    "proxies": [],
+    "user_agent": null,
+    "basic_auth": null
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "json",
+    "file_path": null,
+    "console_enabled": true,
+    "file_enabled": false,
+    "max_bytes": 10485760,
+    "backup_count": 5
+  },
+  "client_id": null
+}

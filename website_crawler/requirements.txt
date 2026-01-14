@@ -1,0 +1,25 @@
+# Core crawling library - stable version
+crawl4ai>=0.7.8
+
+# Data validation - latest Pydantic v2
+pydantic>=2.12.5
+
+# HTTP requests
+requests>=2.31.0
+
+# HTML parsing
+beautifulsoup4>=4.12.0
+lxml>=5.1.0
+
+# MongoDB driver
+pymongo>=4.6.0
+
+# Environment variables
+python-dotenv>=1.0.0
+
+# Browser automation (required by crawl4ai)
+playwright>=1.40.0
+
+# Web framework for API endpoints
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
