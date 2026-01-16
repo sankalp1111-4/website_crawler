@@ -114,8 +114,38 @@ class Crawl4AIEngine:
             # Perform crawl with retry logic
             async def _perform_crawl():
                 """Inner function to perform the actual crawl."""
+                # Build crawl options from config
+                crawl_options = {}
+                
+                # Add markdown extraction if requested
+                if crawl_config.get('extract_markdown', False):
+                    crawl_options['extract_markdown'] = True
+                
+                # Add LLM extraction if configured
+                llm_config = crawl_config.get('llm_extraction')
+                if llm_config:
+                    try:
+                        from crawl4ai.extraction_strategy import LLMExtractionStrategy
+                        from crawl4ai import LLMExtractionStrategyConfig
+                        
+                        llm_strategy_config = LLMExtractionStrategyConfig(
+                            provider=llm_config.get('provider', 'openai'),
+                            api_token=llm_config.get('api_key'),
+                            model=llm_config.get('model', 'gpt-4'),
+                            extraction_schema=llm_config.get('schema', {}),
+                            temperature=llm_config.get('temperature', 0.0)
+                        )
+                        llm_strategy = LLMExtractionStrategy(config=llm_strategy_config)
+                        crawl_options['extraction_strategy'] = llm_strategy
+                        url_logger.log_decision("LLM_EXTRACTION_ENABLED", f"Using LLM extraction with {llm_config.get('provider')}")
+                    except ImportError:
+                        url_logger.warning("[CrawlEngine] LLM extraction requested but not available")
+                    except Exception as e:
+                        url_logger.warning(f"[CrawlEngine] Failed to setup LLM extraction: {e}")
+                
+                # Perform crawl with options
                 result: CrawlResult = await asyncio.wait_for(
-                    self.crawler.arun(url=url),
+                    self.crawler.arun(url=url, **crawl_options),
                     timeout=timeout
                 )
                 
@@ -130,8 +160,19 @@ class Crawl4AIEngine:
                     )
                 
                 # Extract data from result - use safe attribute access
-                html = getattr(result, 'html', None) or getattr(result, 'markdown', None) or ""
-                status_code = getattr(result, 'status_code', 200) or 200
+                # Prioritize markdown if available, otherwise use HTML
+                html = getattr(result, 'html', None) or ""
+                markdown = getattr(result, 'markdown', None) or ""
+                
+                # If markdown was extracted, prefer it (can be converted back to HTML if needed)
+                if markdown and crawl_config.get('prefer_markdown', False):
+                    html = markdown
+                    url_logger.log_decision("MARKDOWN_PREFERRED", "Using markdown content over HTML")
+                
+                # Extract status_code, ensuring it's never None
+                status_code = getattr(result, 'status_code', None)
+                if status_code is None:
+                    status_code = 200
                 
                 # Safely extract headers - CrawlResult may not have headers attribute
                 # Try multiple possible attribute names

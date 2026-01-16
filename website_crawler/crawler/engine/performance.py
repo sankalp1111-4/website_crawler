@@ -215,7 +215,7 @@ class RetryHandler:
             return False
         
         # Don't retry on 4xx errors (except 429 - Too Many Requests)
-        if hasattr(error, 'status_code'):
+        if hasattr(error, 'status_code') and error.status_code is not None:
             status = error.status_code
             if 400 <= status < 500 and status != 429:
                 return False
@@ -234,7 +234,7 @@ class RetryHandler:
             return True
         
         # Retry on 429 (Too Many Requests) and 5xx errors
-        if hasattr(error, 'status_code'):
+        if hasattr(error, 'status_code') and error.status_code is not None:
             status = error.status_code
             if status == 429 or (500 <= status < 600):
                 return True

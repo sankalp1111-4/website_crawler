@@ -20,6 +20,7 @@ class Document(BaseModel):
     title: Optional[str] = Field(None, description="Page title")
     content: str = Field(..., description="Normalized text content")
     raw_html: Optional[str] = Field(None, description="Original HTML (optional for Phase 1)")
+    markdown: Optional[str] = Field(None, description="Markdown representation of content (Phase 3)")
     links: List[str] = Field(default_factory=list, description="Extracted links from the page")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Combined metadata")
     created_at: datetime = Field(default_factory=datetime.utcnow, description="Document creation timestamp")

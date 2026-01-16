@@ -92,6 +92,66 @@ def generate_document_id(url: str, timestamp: Optional[str] = None) -> str:
     return doc_id
 
 
+def generate_source_page_id(normalized_url: str) -> str:
+    """
+    Generate a deterministic source_page_id from normalized URL.
+    
+    This ID is deterministic - same URL always produces same ID.
+    Used for idempotent operations and change detection.
+    
+    Args:
+        normalized_url: Normalized URL
+        
+    Returns:
+        Deterministic source_page_id string
+        
+    Example:
+        >>> generate_source_page_id("https://example.com/page")
+        'src_abc123def456'
+    """
+    # Hash the normalized URL
+    url_hash = hash_url(normalized_url, algorithm="sha256")
+    
+    # Use first 16 characters of hash for brevity
+    short_hash = url_hash[:16]
+    
+    # Create deterministic source_page_id
+    source_page_id = f"src_{short_hash}"
+    
+    return source_page_id
+
+
+def generate_crawl_run_id(start_url: str, timestamp: Optional[datetime] = None) -> str:
+    """
+    Generate a deterministic crawl_run_id from start URL and timestamp.
+    
+    Args:
+        start_url: Starting URL for the crawl
+        timestamp: Optional timestamp. If None, uses current time.
+        
+    Returns:
+        Crawl run ID string
+        
+    Example:
+        >>> generate_crawl_run_id("https://example.com")
+        'run_20240101_120000_abc123'
+    """
+    if timestamp is None:
+        timestamp = datetime.utcnow()
+    
+    # Hash the start URL
+    url_hash = hash_url(start_url, algorithm="sha256")
+    short_hash = url_hash[:8]
+    
+    # Format timestamp
+    timestamp_str = timestamp.strftime("%Y%m%d_%H%M%S")
+    
+    # Create crawl run ID
+    crawl_run_id = f"run_{timestamp_str}_{short_hash}"
+    
+    return crawl_run_id
+
+
 def hash_bytes(data: bytes, algorithm: str = "sha256") -> str:
     """
     Hash binary data.

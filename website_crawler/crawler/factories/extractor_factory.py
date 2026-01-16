@@ -61,7 +61,11 @@ class ExtractorFactory:
         extractor_class = cls._extractors[extractor_type]
         
         try:
-            return extractor_class(**kwargs)
+            # Extract config if provided
+            config = kwargs.pop('config', {}) or {}
+            # Merge remaining kwargs into config
+            config.update(kwargs)
+            return extractor_class(config=config)
         except Exception as e:
             raise TypeError(
                 f"Failed to create {extractor_type} extractor with provided parameters: {e}"

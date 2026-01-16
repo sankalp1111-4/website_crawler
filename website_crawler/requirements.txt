@@ -23,3 +23,6 @@ playwright>=1.40.0
 # Web framework for API endpoints
 fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
+
+# Token counting for chunking
+tiktoken>=0.5.0

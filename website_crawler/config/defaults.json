@@ -40,16 +40,32 @@
     "selectors": {},
     "extract_text": true,
     "extract_links": true,
-    "extract_images": false,
+    "extract_images": true,
     "extract_metadata": true,
     "clean_html": true
   },
   "strategy": {
     "type": "bfs",
-    "max_depth": null,
-    "max_pages": null,
+    "max_depth": 3,
+    "max_pages": 100,
     "priority_patterns": [],
     "exclude_patterns": []
+  },
+  "chunking": {
+    "enabled": false,
+    "chunk_size_tokens": 512,
+    "chunk_overlap_tokens": 50,
+    "chunk_size": 1000,
+    "chunk_overlap": 200,
+    "strategy": "sentence",
+    "preserve_sentences": true,
+    "preserve_paragraphs": true,
+    "tokenizer": "cl100k_base"
+  },
+  "batching": {
+    "batch_size": 10,
+    "max_concurrent": 5,
+    "fail_fast": false
   },
   "auth": {
     "headers": {},

@@ -5,7 +5,7 @@ This module defines the base interface that all crawl strategies must implement.
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Iterator
+from typing import List, Iterator, Optional
 
 
 class BaseStrategy(ABC):
@@ -44,13 +44,43 @@ class BaseStrategy(ABC):
         pass
     
     @abstractmethod
-    def add_url(self, url: str, priority: int = 0) -> None:
+    def add_url(self, url: str, priority: int = 0, depth: Optional[int] = None) -> None:
         """
         Add a URL to the crawl queue.
         
         Args:
             url: The URL to add
             priority: Optional priority for the URL (higher = more important)
+            depth: Optional depth for the URL
         """
         pass
+    
+    def get_next_url(self) -> Optional[str]:
+        """
+        Get the next URL from the strategy queue (for iterative crawling).
+        
+        This is a convenience method for iterative crawling where URLs are
+        added dynamically as links are discovered.
+        
+        Returns:
+            Next URL to crawl, or None if no more URLs available
+        """
+        # Default implementation: try to get from iterator
+        # Subclasses should override for better performance
+        try:
+            if not hasattr(self, '_url_iterator'):
+                return None
+            return next(self._url_iterator)
+        except StopIteration:
+            return None
+    
+    def has_more_urls(self) -> bool:
+        """
+        Check if there are more URLs to crawl.
+        
+        Returns:
+            True if there are more URLs, False otherwise
+        """
+        # Default implementation - subclasses should override
+        return False
 

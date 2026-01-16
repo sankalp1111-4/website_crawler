@@ -213,8 +213,24 @@ class URLFilter:
         
         user_agent = user_agent or self.user_agent
         
+        # Validate user_agent is not empty
+        if not user_agent or not isinstance(user_agent, str) or not user_agent.strip():
+            user_agent = "CrawlerBot"  # Default fallback
+        
         try:
             parsed = urlparse(url)
+            
+            # Validate URL structure - netloc and scheme must be present
+            if not parsed.netloc:
+                url_logger.log_decision("ROBOTS_TXT_INVALID_URL", f"URL missing netloc: {url}, allowing by default")
+                url_logger.log_exit("check_robots_txt", decision="allowed", reason="invalid_url")
+                return True
+            
+            if not parsed.scheme:
+                url_logger.log_decision("ROBOTS_TXT_INVALID_URL", f"URL missing scheme: {url}, allowing by default")
+                url_logger.log_exit("check_robots_txt", decision="allowed", reason="invalid_url")
+                return True
+            
             domain = f"{parsed.scheme}://{parsed.netloc}"
             
             url_logger.log_entry("check_robots_txt", url=url, domain=domain, user_agent=user_agent)
@@ -252,8 +268,22 @@ class URLFilter:
                 return True
             
             # Check if URL path is allowed
-            path = parsed.path or "/"
-            allowed = rp.can_fetch(user_agent, url)
+            # Use a try-except around can_fetch to handle internal parsing errors
+            try:
+                path = parsed.path or "/"
+                # Ensure the URL is properly formatted before passing to can_fetch
+                # can_fetch expects a full URL, so we'll use the original url
+                # but first validate it's properly formatted
+                if not url or not isinstance(url, str):
+                    raise ValueError(f"Invalid URL type or empty: {url}")
+                
+                allowed = rp.can_fetch(user_agent, url)
+            except (AttributeError, TypeError, ValueError) as e:
+                # Handle cases where can_fetch fails due to URL parsing issues
+                url_logger.log_decision("ROBOTS_TXT_PARSE_ERROR", f"Error parsing URL in can_fetch: {str(e)}, allowing by default")
+                url_logger.warning(f"[URLFilter] Error in can_fetch for {url}: {e}", exc_info=True)
+                url_logger.log_exit("check_robots_txt", decision="allowed", reason="parse_error")
+                return True
             
             if not allowed:
                 url_logger.log_decision("ROBOTS_TXT_DISALLOWS", f"robots.txt disallows {user_agent} from {url}")
