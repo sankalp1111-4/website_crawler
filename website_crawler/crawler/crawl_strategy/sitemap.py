@@ -204,8 +204,21 @@ class SitemapStrategy(BaseStrategy):
             self._sitemap_cache[sitemap_url] = urls
             logger.info(f"[SitemapStrategy] Parsed sitemap {sitemap_url}: {len(urls)} URLs found")
             
+        except requests.exceptions.HTTPError as e:
+            # Handle HTTP errors (404, 403, etc.) - these are expected for missing sitemaps
+            if e.response.status_code == 404:
+                logger.debug(f"[SitemapStrategy] Sitemap not found (404): {sitemap_url}")
+            else:
+                logger.warning(f"[SitemapStrategy] HTTP error parsing sitemap {sitemap_url}: {e.response.status_code} {e}")
+        except requests.exceptions.RequestException as e:
+            # Handle network errors
+            logger.warning(f"[SitemapStrategy] Network error parsing sitemap {sitemap_url}: {e}")
+        except ET.ParseError as e:
+            # Handle XML parsing errors
+            logger.warning(f"[SitemapStrategy] XML parsing error for sitemap {sitemap_url}: {e}")
         except Exception as e:
-            logger.warning(f"[SitemapStrategy] Failed to parse sitemap {sitemap_url}: {e}")
+            # Handle any other unexpected errors
+            logger.warning(f"[SitemapStrategy] Unexpected error parsing sitemap {sitemap_url}: {e}")
         
         return urls
     
@@ -220,11 +233,11 @@ class SitemapStrategy(BaseStrategy):
         Returns:
             True if the URL should be crawled, False otherwise
         """
-        # Check if already visited
         normalized = normalize_url(url)
-        if normalized in self.visited:
-            logger.debug(f"[SitemapStrategy] URL {url} already visited")
-            return False
+        
+        # Don't check visited here - URLs in the queue haven't been crawled yet
+        # The visited set is used to prevent adding duplicates to the queue,
+        # not to prevent crawling URLs that are already in the queue
         
         # Check URL filter if available
         if self.url_filter:
@@ -260,8 +273,11 @@ class SitemapStrategy(BaseStrategy):
             # Add to URLs list
             for url, priority, lastmod in all_urls:
                 normalized = normalize_url(url)
+                # Only add if not already in queue and passes filter
                 if normalized not in self.visited and self.should_crawl(normalized, 0):
                     self.urls.append((normalized, priority, lastmod))
+                    # Mark as visited to prevent duplicates when adding to queue
+                    # Note: visited check is NOT used in should_crawl() to allow queued URLs to be crawled
                     self.visited.add(normalized)
             
             logger.info(f"[SitemapStrategy] Discovered {len(self.urls)} URLs from sitemaps")
@@ -270,6 +286,7 @@ class SitemapStrategy(BaseStrategy):
             normalized = normalize_url(start_url)
             if normalized not in self.visited:
                 self.urls.append((normalized, 1.0, None))
+                # Mark as visited to prevent duplicates in queue
                 self.visited.add(normalized)
         
         self._initialized = True
@@ -318,10 +335,13 @@ class SitemapStrategy(BaseStrategy):
             url, priority, lastmod = self.urls[self._current_index]
             self._current_index += 1
             
+            # Check if URL should be crawled (filter check)
             if self.should_crawl(url, 0):
                 self.crawled_count += 1
-                logger.debug(f"[SitemapStrategy] Returning next URL (priority={priority:.2f}): {url}")
+                logger.info(f"[SitemapStrategy] Returning next URL (priority={priority:.2f}, {self.crawled_count}/{self.max_pages}): {url}")
                 return url
+            else:
+                logger.debug(f"[SitemapStrategy] Skipping URL (filtered): {url}")
         
         return None
     

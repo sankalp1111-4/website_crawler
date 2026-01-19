@@ -97,27 +97,44 @@ class CrawlOrchestrator:
         max_depth = strategy_config.get('max_depth') or crawler_config.get('max_depth', 3)
         max_pages = strategy_config.get('max_pages') or crawler_config.get('max_pages', 100)
         
+        # Log strategy selection for debugging
+        self.logger.info(
+            f"[Orchestrator] Initializing strategy type: {strategy_type} "
+            f"(strategy_config keys: {list(strategy_config.keys())})"
+        )
+        
+        # Build strategy kwargs - only include max_depth for strategies that support it
+        strategy_kwargs = {
+            'max_pages': max_pages,
+            'url_filter': self.url_filter,
+            'config': {
+                'filter_settings': {
+                    'respect_robots_txt': crawler_config.get('respect_robots_txt', True),
+                    'user_agent': auth_config.get('user_agent', 'CrawlerBot'),
+                    'allowed_domains': crawler_config.get('allowed_domains'),
+                    'blocked_domains': crawler_config.get('blocked_domains'),
+                    'exclude_patterns': crawler_config.get('exclude_patterns', []),
+                },
+                **strategy_config
+            }
+        }
+        
+        # Only add max_depth for strategies that support it (not sitemap)
+        if strategy_type != 'sitemap':
+            strategy_kwargs['max_depth'] = max_depth
+        
         try:
             self.strategy: Optional[BaseStrategy] = StrategyFactory.create(
                 strategy_type,
-                max_depth=max_depth,
-                max_pages=max_pages,
-                url_filter=self.url_filter,
-                config={
-                    'filter_settings': {
-                        'respect_robots_txt': crawler_config.get('respect_robots_txt', True),
-                        'user_agent': auth_config.get('user_agent', 'CrawlerBot'),
-                        'allowed_domains': crawler_config.get('allowed_domains'),
-                        'blocked_domains': crawler_config.get('blocked_domains'),
-                        'exclude_patterns': crawler_config.get('exclude_patterns', []),
-                    },
-                    **strategy_config
-                }
+                **strategy_kwargs
             )
             self.logger.info(f"[Orchestrator] Using {strategy_type} strategy")
         except (ValueError, TypeError) as e:
-            self.logger.warning(f"[Orchestrator] Failed to create {strategy_type} strategy: {e}")
-            self.strategy = None
+            self.logger.error(f"[Orchestrator] Failed to create {strategy_type} strategy: {e}", exc_info=True)
+            raise ValidationError(
+                f"Failed to initialize strategy '{strategy_type}': {str(e)}. "
+                f"Check your strategy configuration."
+            ) from e
         
         # Initialize chunking service (Phase 3) - token-aware
         # Note: Service may be None initially and created on-demand when config overrides enable it
@@ -249,27 +266,48 @@ class CrawlOrchestrator:
         max_depth = strategy_config.get('max_depth') or crawler_config.get('max_depth', 3)
         max_pages = strategy_config.get('max_pages') or crawler_config.get('max_pages', 100)
         
+        # Log strategy selection for debugging
+        self.logger.info(
+            f"[Orchestrator] Strategy type from config: {strategy_type} "
+            f"(strategy_config keys: {list(strategy_config.keys())})"
+        )
+        
+        # Build strategy kwargs - only include max_depth for strategies that support it
+        strategy_kwargs = {
+            'max_pages': max_pages,
+            'url_filter': self.url_filter,
+            'config': {
+                'filter_settings': {
+                    'respect_robots_txt': crawler_config.get('respect_robots_txt', True),
+                    'user_agent': auth_config.get('user_agent', 'CrawlerBot'),
+                    'allowed_domains': crawler_config.get('allowed_domains'),
+                    'blocked_domains': crawler_config.get('blocked_domains'),
+                    'exclude_patterns': crawler_config.get('exclude_patterns', []),
+                },
+                **strategy_config
+            }
+        }
+        
+        # Only add max_depth for strategies that support it (not sitemap)
+        if strategy_type != 'sitemap':
+            strategy_kwargs['max_depth'] = max_depth
+        
         try:
             self.strategy = StrategyFactory.create(
                 strategy_type,
-                max_depth=max_depth,
-                max_pages=max_pages,
-                url_filter=self.url_filter,
-                config={
-                    'filter_settings': {
-                        'respect_robots_txt': crawler_config.get('respect_robots_txt', True),
-                        'user_agent': auth_config.get('user_agent', 'CrawlerBot'),
-                        'allowed_domains': crawler_config.get('allowed_domains'),
-                        'blocked_domains': crawler_config.get('blocked_domains'),
-                        'exclude_patterns': crawler_config.get('exclude_patterns', []),
-                    },
-                    **strategy_config
-                }
+                **strategy_kwargs
             )
-            self.logger.info(f"[Orchestrator] Re-initialized {strategy_type} strategy (max_depth={max_depth}, max_pages={max_pages})")
+            log_msg = f"[Orchestrator] Re-initialized {strategy_type} strategy (max_pages={max_pages}"
+            if strategy_type != 'sitemap':
+                log_msg += f", max_depth={max_depth}"
+            log_msg += ")"
+            self.logger.info(log_msg)
         except (ValueError, TypeError) as e:
-            self.logger.warning(f"[Orchestrator] Failed to create {strategy_type} strategy: {e}")
-            self.strategy = None
+            self.logger.error(f"[Orchestrator] Failed to create {strategy_type} strategy: {e}", exc_info=True)
+            raise ValidationError(
+                f"Failed to initialize strategy '{strategy_type}': {str(e)}. "
+                f"Check your strategy configuration."
+            ) from e
         
         # Re-initialize chunking service if enabled
         chunking_config = self.config.get('chunking', {})
