@@ -68,7 +68,6 @@ def _load_env_overrides() -> Dict[str, Any]:
         "STORAGE_": "storage",
         "EXTRACTION_": "extraction",
         "STRATEGY_": "strategy",
-        "AUTH_": "auth",
         "LOGGING_": "logging",
     }
     

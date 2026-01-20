@@ -41,7 +41,7 @@ class HTMLParser:
             url: Base URL for resolving relative links
             
         Returns:
-            Dictionary with extracted data (text, links, title, metadata)
+            Dictionary with extracted data (text, links, title, metadata, images)
         """
         url_logger = logger.with_url(url)
         
@@ -51,18 +51,21 @@ class HTMLParser:
             links = self.extract_links(html, url)
             title = self.extract_title(html)
             metadata = self.extract_metadata(html)
+            images = self.extract_images(html, url)
             
             result = {
                 'text': text,
                 'links': links,
                 'title': title,
-                'metadata': metadata
+                'metadata': metadata,
+                'images': images
             }
             
-            # Log in simple format: [HTMLParser] Parsed HTML → text=139 chars, links=1
+            # Log in simple format: [HTMLParser] Parsed HTML → text=139 chars, links=1, images=2
             text_len = len(text)
             links_count = len(links)
-            url_logger.info(f"[HTMLParser] Parsed HTML → text={text_len} chars, links={links_count}")
+            images_count = len(images)
+            url_logger.info(f"[HTMLParser] Parsed HTML → text={text_len} chars, links={links_count}, images={images_count}")
             
             return result
     
@@ -201,6 +204,102 @@ class HTMLParser:
             # Return empty dict as fallback
         
         return metadata
+    
+    def extract_images(self, html: str, base_url: str) -> List[str]:
+        """
+        Extract all image URLs from HTML.
+        
+        Handles:
+        - src attribute (standard image source)
+        - srcset attribute (responsive images, extracts all URLs)
+        - data-src attribute (lazy-loaded images)
+        
+        Args:
+            html: HTML content
+            base_url: Base URL for resolving relative URLs
+            
+        Returns:
+            List of absolute image URLs (duplicates removed)
+        """
+        if not html or not base_url:
+            return []
+        
+        images = set()  # Use set to automatically remove duplicates
+        
+        try:
+            soup = BeautifulSoup(html, 'lxml')
+            
+            # Find all img tags
+            for img in soup.find_all('img'):
+                # Extract from src attribute
+                src = img.get('src')
+                if src:
+                    absolute_url = resolve_relative_url(src, base_url)
+                    if absolute_url:
+                        images.add(absolute_url)
+                
+                # Extract from srcset attribute (responsive images)
+                # srcset format: "image1.jpg 1x, image2.jpg 2x" or "image1.jpg 300w, image2.jpg 600w"
+                srcset = img.get('srcset')
+                if srcset:
+                    # Parse srcset: split by comma, then extract URL (before space or comma)
+                    for srcset_item in srcset.split(','):
+                        srcset_item = srcset_item.strip()
+                        # Extract URL (everything before the first space)
+                        url_part = srcset_item.split()[0] if srcset_item.split() else srcset_item
+                        if url_part:
+                            absolute_url = resolve_relative_url(url_part, base_url)
+                            if absolute_url:
+                                images.add(absolute_url)
+                
+                # Extract from data-src attribute (lazy-loaded images)
+                data_src = img.get('data-src')
+                if data_src:
+                    absolute_url = resolve_relative_url(data_src, base_url)
+                    if absolute_url:
+                        images.add(absolute_url)
+                
+                # Also check data-srcset (lazy-loaded responsive images)
+                data_srcset = img.get('data-srcset')
+                if data_srcset:
+                    for srcset_item in data_srcset.split(','):
+                        srcset_item = srcset_item.strip()
+                        url_part = srcset_item.split()[0] if srcset_item.split() else srcset_item
+                        if url_part:
+                            absolute_url = resolve_relative_url(url_part, base_url)
+                            if absolute_url:
+                                images.add(absolute_url)
+            
+            # Also check picture/source elements (for responsive images)
+            for source in soup.find_all('source'):
+                srcset = source.get('srcset')
+                if srcset:
+                    for srcset_item in srcset.split(','):
+                        srcset_item = srcset_item.strip()
+                        url_part = srcset_item.split()[0] if srcset_item.split() else srcset_item
+                        if url_part:
+                            absolute_url = resolve_relative_url(url_part, base_url)
+                            if absolute_url:
+                                images.add(absolute_url)
+                
+                # Check data-srcset in source elements
+                data_srcset = source.get('data-srcset')
+                if data_srcset:
+                    for srcset_item in data_srcset.split(','):
+                        srcset_item = srcset_item.strip()
+                        url_part = srcset_item.split()[0] if srcset_item.split() else srcset_item
+                        if url_part:
+                            absolute_url = resolve_relative_url(url_part, base_url)
+                            if absolute_url:
+                                images.add(absolute_url)
+                
+        except Exception as e:
+            error_msg = f"Failed to extract images from HTML: {str(e)}"
+            logger.warning(error_msg, exc_info=True)
+            # Return empty list as fallback, but log the warning
+        
+        # Convert set to sorted list for consistent output
+        return sorted(list(images))
     
     def clean_text(self, text: str) -> str:
         """

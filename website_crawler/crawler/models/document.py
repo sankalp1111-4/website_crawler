@@ -22,6 +22,7 @@ class Document(BaseModel):
     raw_html: Optional[str] = Field(None, description="Original HTML (optional for Phase 1)")
     markdown: Optional[str] = Field(None, description="Markdown representation of content (Phase 3)")
     links: List[str] = Field(default_factory=list, description="Extracted links from the page")
+    images: List[str] = Field(default_factory=list, description="Extracted image URLs from the page")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Combined metadata")
     created_at: datetime = Field(default_factory=datetime.utcnow, description="Document creation timestamp")
     hash: str = Field(..., description="Content hash for change detection")

@@ -77,6 +77,9 @@ class XPathExtractor(BaseExtractor):
                 # Extract links
                 links = self._extract_links(tree, url)
                 
+                # Extract images
+                images = self._extract_images(tree, url)
+                
                 # Clean text content
                 text = self._clean_text(main_content) if main_content else ""
                 
@@ -84,11 +87,12 @@ class XPathExtractor(BaseExtractor):
                     'text': text,
                     'title': title,
                     'links': links,
+                    'images': images,
                     'metadata': metadata,
                     'html': main_content if self.config.get('include_html', False) else None
                 }
                 
-                url_logger.info(f"[XPathExtractor] Extracted content: text={len(text)} chars, links={len(links)}")
+                url_logger.info(f"[XPathExtractor] Extracted content: text={len(text)} chars, links={len(links)}, images={len(images)}")
                 
                 return result
                 
@@ -239,6 +243,91 @@ class XPathExtractor(BaseExtractor):
         
         return links
     
+    def _extract_images(self, tree: etree._Element, base_url: str) -> List[str]:
+        """
+        Extract image URLs from HTML.
+        
+        Handles src, srcset, data-src, and data-srcset attributes.
+        
+        Args:
+            tree: lxml ElementTree object
+            base_url: Base URL for resolving relative URLs
+            
+        Returns:
+            List of absolute image URLs (duplicates removed)
+        """
+        images = set()  # Use set to automatically remove duplicates
+        
+        try:
+            from ..url.normalizer import resolve_relative_url
+            
+            # Find all img tags
+            img_elements = tree.xpath('//img')
+            for img in img_elements:
+                # Extract from src attribute
+                src = img.get('src')
+                if src:
+                    absolute_url = resolve_relative_url(src, base_url)
+                    if absolute_url:
+                        images.add(absolute_url)
+                
+                # Extract from srcset attribute (responsive images)
+                srcset = img.get('srcset')
+                if srcset:
+                    for srcset_item in srcset.split(','):
+                        srcset_item = srcset_item.strip()
+                        url_part = srcset_item.split()[0] if srcset_item.split() else srcset_item
+                        if url_part:
+                            absolute_url = resolve_relative_url(url_part, base_url)
+                            if absolute_url:
+                                images.add(absolute_url)
+                
+                # Extract from data-src attribute (lazy-loaded images)
+                data_src = img.get('data-src')
+                if data_src:
+                    absolute_url = resolve_relative_url(data_src, base_url)
+                    if absolute_url:
+                        images.add(absolute_url)
+                
+                # Extract from data-srcset (lazy-loaded responsive images)
+                data_srcset = img.get('data-srcset')
+                if data_srcset:
+                    for srcset_item in data_srcset.split(','):
+                        srcset_item = srcset_item.strip()
+                        url_part = srcset_item.split()[0] if srcset_item.split() else srcset_item
+                        if url_part:
+                            absolute_url = resolve_relative_url(url_part, base_url)
+                            if absolute_url:
+                                images.add(absolute_url)
+            
+            # Also check picture/source elements (for responsive images)
+            source_elements = tree.xpath('//source')
+            for source in source_elements:
+                srcset = source.get('srcset')
+                if srcset:
+                    for srcset_item in srcset.split(','):
+                        srcset_item = srcset_item.strip()
+                        url_part = srcset_item.split()[0] if srcset_item.split() else srcset_item
+                        if url_part:
+                            absolute_url = resolve_relative_url(url_part, base_url)
+                            if absolute_url:
+                                images.add(absolute_url)
+                
+                data_srcset = source.get('data-srcset')
+                if data_srcset:
+                    for srcset_item in data_srcset.split(','):
+                        srcset_item = srcset_item.strip()
+                        url_part = srcset_item.split()[0] if srcset_item.split() else srcset_item
+                        if url_part:
+                            absolute_url = resolve_relative_url(url_part, base_url)
+                            if absolute_url:
+                                images.add(absolute_url)
+        except Exception as e:
+            logger.debug(f"[XPathExtractor] Image extraction failed: {e}")
+        
+        # Convert set to sorted list for consistent output
+        return sorted(list(images))
+    
     def _clean_text(self, text: str) -> str:
         """
         Clean and normalize text content.
@@ -269,6 +358,7 @@ class XPathExtractor(BaseExtractor):
             'text': '',
             'title': None,
             'links': [],
+            'images': [],
             'metadata': {},
             'html': None
         }

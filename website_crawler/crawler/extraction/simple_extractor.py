@@ -45,5 +45,6 @@ class SimpleExtractor:
             'text': parsed_data.get('text', ''),
             'title': parsed_data.get('title'),
             'links': parsed_data.get('links', []),
+            'images': parsed_data.get('images', []),
             'metadata': parsed_data.get('metadata', {})
         }

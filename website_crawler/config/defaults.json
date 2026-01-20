@@ -11,7 +11,8 @@
     "max_redirects": 5,
     "max_html_size": 16777216,
     "reject_empty_content": true,
-    "log_empty_content_warning": true
+    "log_empty_content_warning": true,
+    "user_agent": "CrawlerBot"
   },
   "engine": {
     "headless": true,
@@ -66,13 +67,6 @@
     "batch_size": 10,
     "max_concurrent": 5,
     "fail_fast": false
-  },
-  "auth": {
-    "headers": {},
-    "cookies": {},
-    "proxies": [],
-    "user_agent": null,
-    "basic_auth": null
   },
   "logging": {
     "level": "INFO",

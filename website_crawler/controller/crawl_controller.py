@@ -1,16 +1,19 @@
 """
 Crawl controller for handling crawl API requests.
 """
-import logging
 import copy
-from typing import Dict, Any, Optional
+from contextlib import contextmanager
+from typing import Dict, Any, Optional, List
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, Field, HttpUrl, ConfigDict
 
 from crawler.orchestrator import CrawlOrchestrator
-from config.loader import load_config, deep_merge
+from config.loader import load_config
 from config.schema import MainConfig
-from controller.models import ClientBatchCrawlRequest, ClientCrawlRequest
+from controller.models import (
+    CrawlResponse,
+    BatchCrawlResponse,
+    ClientCrawlRequest
+)
 from controller.policy_resolver import CrawlPolicyResolver
 from crawler.exceptions import (
     CrawlError,
@@ -22,191 +25,6 @@ from utils.logging_config import ComponentLoggerAdapter, get_component_logger
 logger: ComponentLoggerAdapter = get_component_logger("CrawlController", __name__)
 
 router = APIRouter(prefix="/crawl", tags=["crawl"])
-
-
-class CrawlRequest(BaseModel):
-    """Request model for crawl endpoint."""
-    url: HttpUrl = Field(
-        ...,
-        description="URL to crawl",
-        examples=["https://example.com", "https://www.example.com/page"]
-    )
-    config_override: Optional[Dict[str, Any]] = Field(
-        None,
-        description="""
-        Optional configuration overrides. Can override any section:
-        
-        - **crawler**: max_depth, max_pages, delay, timeout, retries, rate_limit, respect_robots_txt, 
-          follow_redirects, max_redirects, max_html_size, reject_empty_content, allowed_domains, 
-          blocked_domains, exclude_patterns
-        - **engine**: headless, browser_type (chromium/firefox/webkit), viewport_width, viewport_height, 
-          wait_for, wait_timeout, js_enabled, images_enabled, css_enabled
-        - **storage**: type, connection_string, database, collection, username, password, auth_source, 
-          max_pool_size, max_document_size
-        - **extraction**: type (css/xpath/llm), selectors, extract_text, extract_links, extract_images, 
-          extract_metadata, clean_html, generate_markdown
-        - **strategy**: type (bfs/sitemap/adaptive), max_depth, max_pages, priority_patterns, exclude_patterns
-        - **auth**: headers, cookies, proxies, user_agent, basic_auth
-        - **chunking**: enabled, chunk_size, chunk_overlap, strategy (sentence/paragraph/token), preserve_boundaries
-        - **batching**: batch_size, max_concurrent, fail_fast
-        - **logging**: level, format, file_path, console_enabled, file_enabled
-        """,
-        examples=[
-            None,
-            {
-                "crawler": {
-                    "max_depth": 2,
-                    "max_pages": 50,
-                    "delay": 2.0,
-                    "timeout": 30,
-                    "respect_robots_txt": True
-                },
-                "engine": {
-                    "headless": True,
-                    "wait_for": ".content-loaded",
-                    "browser_type": "chromium"
-                }
-            },
-            {
-                "extraction": {
-                    "type": "css",
-                    "extract_images": True,
-                    "selectors": {
-                        "title": "h1",
-                        "content": ".main-content"
-                    }
-                },
-                "chunking": {
-                    "enabled": True,
-                    "chunk_size": 1000,
-                    "chunk_overlap": 200
-                }
-            },
-            {
-                "extraction": {
-                    "type": "xpath",
-                    "selectors": {
-                        "title": "//h1",
-                        "content": "//div[@class='content']"
-                    }
-                },
-                "strategy": {
-                    "type": "bfs",
-                    "max_depth": 3
-                }
-            }
-        ]
-    )
-    
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "url": "https://example.com",
-                "config_override": {
-                    "crawler": {
-                        "max_depth": 2,
-                        "max_pages": 50,
-                        "timeout": 30
-                    },
-                    "extraction": {
-                        "type": "css",
-                        "selectors": {
-                            "title": "h1",
-                            "content": ".main-content"
-                        }
-                    },
-                    "engine": {
-                        "headless": True,
-                        "wait_for": ".content-loaded"
-                    }
-                }
-            }
-        }
-    )
-
-
-class CrawlResponse(BaseModel):
-    """Response model for crawl endpoint."""
-    success: bool = Field(
-        ...,
-        description="Whether the crawl was successful",
-        examples=[True, False]
-    )
-    document_id: Optional[str] = Field(
-        None,
-        description="Document ID if successful. This ID can be used to retrieve the crawled document from storage.",
-        examples=["507f1f77bcf86cd799439011", "doc_abc123xyz"]
-    )
-    url: str = Field(
-        ...,
-        description="Crawled URL",
-        examples=["https://example.com", "https://www.example.com/page"]
-    )
-    message: str = Field(
-        ...,
-        description="Response message",
-        examples=["Crawl completed successfully", "Crawl failed"]
-    )
-    warnings: list[str] = Field(
-        default_factory=list,
-        description="Any warnings encountered during the crawl process",
-        examples=[[], ["Empty content detected", "Timeout occurred"]]
-    )
-
-
-class BatchCrawlResponse(BaseModel):
-    """Response model for batch crawl endpoint."""
-    success: bool = Field(
-        ...,
-        description="Whether the crawl was successful",
-        examples=[True, False]
-    )
-    documents_count: int = Field(
-        ...,
-        description="Number of documents crawled",
-        examples=[1, 10, 50]
-    )
-    document_ids: list[str] = Field(
-        default_factory=list,
-        description="List of document IDs for crawled documents",
-        examples=[["doc1", "doc2", "doc3"]]
-    )
-    start_url: str = Field(
-        ...,
-        description="Starting URL",
-        examples=["https://example.com"]
-    )
-    message: str = Field(
-        ...,
-        description="Response message",
-        examples=["Batch crawl completed successfully", "Batch crawl failed"]
-    )
-    warnings: list[str] = Field(
-        default_factory=list,
-        description="Any warnings encountered during the crawl process",
-        examples=[[], ["Some URLs failed to crawl"]]
-    )
-    
-    model_config = ConfigDict(
-        json_schema_extra={
-            "examples": [
-                {
-                    "success": True,
-                    "document_id": "507f1f77bcf86cd799439011",
-                    "url": "https://example.com",
-                    "message": "Crawl completed successfully",
-                    "warnings": []
-                },
-                {
-                    "success": True,
-                    "document_id": "507f1f77bcf86cd799439012",
-                    "url": "https://example.com/page",
-                    "message": "Crawl completed successfully",
-                    "warnings": ["Empty content detected in some pages"]
-                }
-            ]
-        }
-    )
 
 
 # Global orchestrator instance (initialized on first request)
@@ -225,7 +43,7 @@ def get_orchestrator() -> CrawlOrchestrator:
     if _orchestrator is None:
         logger.log_entry("get_orchestrator", action="initializing")
         config = load_config()
-        config_dict = config.model_dump() if hasattr(config, 'model_dump') else dict(config)
+        config_dict = config.model_dump()
         _orchestrator = CrawlOrchestrator(config_dict)
         _orchestrator.initialize()
         logger.log_state_change("orchestrator_not_initialized", "orchestrator_initialized")
@@ -236,13 +54,156 @@ def get_orchestrator() -> CrawlOrchestrator:
     return _orchestrator
 
 
+# ============================================================================
+# Helper Functions
+# ============================================================================
+
+async def _resolve_request_config(
+    request: ClientCrawlRequest,
+    orchestrator: CrawlOrchestrator,
+    request_logger: ComponentLoggerAdapter
+) -> Dict[str, Any]:
+    """
+    Resolve client request to internal configuration dictionary.
+    
+    Args:
+        request: Client crawl request
+        orchestrator: Orchestrator instance
+        request_logger: Logger for the request
+        
+    Returns:
+        Configuration dictionary ready for orchestrator
+    """
+    request_logger.log_entry("resolve_client_intent")
+    base_config = MainConfig.model_validate(orchestrator.config)
+    resolver = CrawlPolicyResolver(base_config)
+    internal_config = await resolver.resolve(request)
+    request_logger.log_exit("resolve_client_intent", status="resolved")
+    
+    # Convert MainConfig to dict
+    config_dict = internal_config.model_dump()
+    
+    # Handle chunking if requested (not in MainConfig schema)
+    if request.enable_chunking:
+        chunking_config = orchestrator.config.get('chunking', {}).copy()
+        chunking_config['enabled'] = True
+        config_dict['chunking'] = chunking_config
+    
+    return config_dict
+
+
+@contextmanager
+def isolated_config(orchestrator: CrawlOrchestrator, config_dict: Dict[str, Any]):
+    """
+    Context manager for temporarily applying config to orchestrator.
+    
+    Ensures config is always restored, even if an exception occurs.
+    
+    Args:
+        orchestrator: Orchestrator instance
+        config_dict: Configuration dictionary to apply
+    """
+    original_config = copy.deepcopy(orchestrator.config)
+    try:
+        orchestrator.config = config_dict
+        orchestrator._reinitialize_components()
+        yield
+    finally:
+        orchestrator.config = original_config
+        orchestrator._reinitialize_components()
+
+
+def _handle_crawl_exception(
+    e: Exception,
+    url_str: str,
+    request_logger: ComponentLoggerAdapter
+) -> HTTPException:
+    """
+    Handle exceptions and return appropriate HTTPException.
+    
+    Args:
+        e: Exception that occurred
+        url_str: URL being crawled
+        request_logger: Logger for the request
+        
+    Returns:
+        HTTPException with appropriate status code and details
+    """
+    if isinstance(e, ValidationError):
+        request_logger.log_decision("VALIDATION_ERROR", reason=str(e))
+        request_logger.error(f"[CrawlController] Validation error: {str(e)}", exc_info=True)
+        request_logger.log_state_change("request_pending", "request_failed", error_type="ValidationError")
+        status_code = status.HTTP_400_BAD_REQUEST
+        error_msg = "Validation failed"
+        message = str(e)
+    elif isinstance(e, CrawlError):
+        request_logger.log_decision("CRAWL_ERROR", reason=str(e))
+        request_logger.error(f"[CrawlController] Crawl error: {str(e)}", exc_info=True)
+        request_logger.log_state_change("request_pending", "request_failed", error_type="CrawlError")
+        status_code = status.HTTP_502_BAD_GATEWAY
+        error_msg = "Crawl failed"
+        message = str(e)
+    elif isinstance(e, StorageError):
+        request_logger.log_decision("STORAGE_ERROR", reason=str(e))
+        request_logger.error(f"[CrawlController] Storage error: {str(e)}", exc_info=True)
+        request_logger.log_state_change("request_pending", "request_failed", error_type="StorageError")
+        status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        error_msg = "Storage failed"
+        message = str(e)
+    else:
+        request_logger.log_decision("UNEXPECTED_ERROR", reason=str(e))
+        request_logger.exception(f"[CrawlController] Unexpected error: {str(e)}")
+        request_logger.log_state_change("request_pending", "request_failed", error_type="Exception")
+        status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        error_msg = "Internal server error"
+        message = "An unexpected error occurred"
+    
+    return HTTPException(
+        status_code=status_code,
+        detail={
+            "error": error_msg,
+            "message": message,
+            "url": url_str
+        }
+    )
+
+
+def _get_document_ids(orchestrator: CrawlOrchestrator, crawl_run_id: str) -> List[str]:
+    """
+    Fetch document IDs for a crawl run from storage.
+    
+    Args:
+        orchestrator: Orchestrator instance
+        crawl_run_id: Crawl run ID
+        
+    Returns:
+        List of document IDs
+    """
+    try:
+        if hasattr(orchestrator.storage, 'source_pages_collection') and orchestrator.storage.source_pages_collection:
+            source_pages = list(orchestrator.storage.source_pages_collection.find(
+                {'crawl_run_id': crawl_run_id}
+            ))
+            return [str(sp.get('_id', sp.get('source_page_id', ''))) for sp in source_pages]
+    except Exception:
+        pass
+    return []
+
+
+# ============================================================================
+# API Endpoints
+# ============================================================================
+
 @router.post(
     "",
     response_model=CrawlResponse,
     status_code=status.HTTP_200_OK,
     summary="Crawl a single URL",
     description="""
-    Crawl a single URL and store the results in the configured storage backend (MongoDB).
+    Crawl a single URL and store the results in the configured storage backend.
+    
+    This endpoint uses intent-based configuration - just tell us what you want.
+    Backend handles all infrastructure settings (storage, logging, rate limits, etc.).
     
     This endpoint performs a single-page crawl with the following pipeline:
     1. URL validation and normalization
@@ -253,23 +214,26 @@ def get_orchestrator() -> CrawlOrchestrator:
     6. Optional content chunking
     7. Document storage in MongoDB
     
-    **Configuration Overrides:**
+    **Client-Controlled Parameters:**
     
-    The `config_override` parameter allows you to customize any aspect of the crawl:
+    - **max_pages**: Maximum number of pages to crawl (1-10000)
+    - **max_depth**: Maximum crawling depth (1-10)
+    - **strategy**: Crawl strategy (auto/sitemap/bfs/dfs)
+    - **render_js**: Enable JavaScript rendering
+    - **extract**: What to extract (text, links, images, metadata)
+    - **selectors**: CSS selectors for content extraction
+    - **allowed_domains**: List of allowed domains
+    - **exclude_patterns**: URL patterns to exclude
+    - **enable_chunking**: Enable document chunking
     
-    - **crawler**: Control crawl behavior (max_depth, max_pages, delay, timeout, retries, rate_limit, 
-      respect_robots_txt, follow_redirects, max_redirects, max_html_size, reject_empty_content, 
-      allowed_domains, blocked_domains, exclude_patterns)
-    - **engine**: Browser settings (headless, browser_type: chromium/firefox/webkit, viewport_width, 
-      viewport_height, wait_for selector, wait_timeout, js_enabled, images_enabled, css_enabled)
-    - **extraction**: Content extraction (type: css/xpath/llm, selectors dict, extract_text, extract_links, 
-      extract_images, extract_metadata, clean_html, generate_markdown)
-    - **chunking**: Text chunking (enabled, chunk_size, chunk_overlap, strategy: sentence/paragraph/token, 
-      preserve_boundaries)
-    - **auth**: Authentication (headers dict, cookies dict, proxies list, user_agent string, basic_auth dict)
-    - **logging**: Logging settings (level, format, file_path, console_enabled, file_enabled)
+    **Backend-Controlled (Not Exposed):**
     
-    Configuration overrides are merged with defaults and only apply to this request.
+    - Storage configuration (connection strings, credentials, database settings)
+    - Engine infrastructure (browser type, viewport dimensions)
+    - Rate limiting, timeouts, retries
+    - Logging configuration
+    
+    All backend settings are configured via backend config files and environment variables.
     """,
     responses={
         200: {
@@ -330,12 +294,12 @@ def get_orchestrator() -> CrawlOrchestrator:
         }
     }
 )
-async def crawl_url(request: CrawlRequest) -> CrawlResponse:
+async def crawl_url(request: ClientCrawlRequest) -> CrawlResponse:
     """
     Crawl a URL and store the results.
     
     Args:
-        request: Crawl request containing URL and optional config overrides
+        request: Client crawl request with intent-based configuration
         
     Returns:
         CrawlResponse with crawl results
@@ -346,155 +310,38 @@ async def crawl_url(request: CrawlRequest) -> CrawlResponse:
     url_str = str(request.url)
     request_logger = logger.with_url(url_str)
     
-    with request_logger.component_flow("crawl_url", url=url_str, has_config_override=bool(request.config_override)):
-        warnings = []
-        
+    with request_logger.component_flow("crawl_url", url=url_str):
         try:
             # Get orchestrator
             request_logger.log_entry("get_orchestrator")
             orchestrator = get_orchestrator()
             request_logger.log_exit("get_orchestrator", status="retrieved")
             
-            # Apply config overrides if provided
-            if request.config_override:
-                request_logger.log_entry("apply_config_overrides", overrides=request.config_override)
-                
-                # Log strategy before override
-                original_strategy = orchestrator.config.get('strategy', {}).get('type', 'unknown')
-                override_strategy = request.config_override.get('strategy', {}).get('type') if isinstance(request.config_override.get('strategy'), dict) else None
-                
-                if override_strategy:
-                    request_logger.info(f"[CrawlController] Strategy override requested: {override_strategy} (original: {original_strategy})")
-                
-                # Deep copy original config to restore later
-                original_config = copy.deepcopy(orchestrator.config)
-                # Deep merge config overrides with existing config
-                orchestrator.config = deep_merge(orchestrator.config, request.config_override)
-                
-                # Verify strategy was merged correctly
-                merged_strategy = orchestrator.config.get('strategy', {}).get('type', 'unknown')
-                request_logger.info(f"[CrawlController] Strategy after merge: {merged_strategy}")
-                
-                if override_strategy and merged_strategy != override_strategy:
-                    request_logger.warning(
-                        f"[CrawlController] Strategy override failed! Requested: {override_strategy}, "
-                        f"but merged to: {merged_strategy}"
-                    )
-                
-                # Re-initialize components to use updated config
-                orchestrator._reinitialize_components()
-                request_logger.info("[CrawlController] Config overrides applied and components re-initialized")
-                request_logger.log_exit("apply_config_overrides", status="applied")
+            # Resolve client intent to internal config
+            config_dict = await _resolve_request_config(request, orchestrator, request_logger)
             
-            # Crawl the URL using unified architecture
-            request_logger.log_entry("orchestrator.crawl_url_unified", url=url_str)
-            source_page = await orchestrator.crawl_url_unified(url_str)
-            request_logger.log_exit("orchestrator.crawl_url_unified", 
-                                   source_page_id=source_page.source_page_id,
-                                   status="success")
+            # Use isolated config context
+            with isolated_config(orchestrator, config_dict):
+                # Crawl the URL using unified architecture
+                request_logger.log_entry("orchestrator.crawl_url_unified", url=url_str)
+                source_page = await orchestrator.crawl_url_unified(url_str)
+                request_logger.log_exit("orchestrator.crawl_url_unified", 
+                                       source_page_id=source_page.source_page_id,
+                                       status="success")
+                
+                response = CrawlResponse(
+                    success=True,
+                    document_id=source_page.source_page_id,
+                    url=source_page.url,
+                    message="Crawl completed successfully",
+                    warnings=[]
+                )
+                request_logger.log_state_change("request_pending", "request_completed", 
+                                             document_id=source_page.source_page_id)
+                return response
             
-            # Restore original config if overrides were applied
-            if request.config_override:
-                request_logger.log_entry("restore_config")
-                orchestrator.config = original_config
-                # Re-initialize components to use restored config
-                orchestrator._reinitialize_components()
-                request_logger.log_state_change("config_overridden", "config_restored")
-                request_logger.log_exit("restore_config", status="restored")
-            
-            response = CrawlResponse(
-                success=True,
-                document_id=source_page.source_page_id,  # Use source_page_id as document_id for compatibility
-                url=source_page.url,
-                message="Crawl completed successfully",
-                warnings=warnings
-            )
-            request_logger.log_state_change("request_pending", "request_completed", 
-                                         document_id=source_page.source_page_id)
-            return response
-            
-        except ValidationError as e:
-            request_logger.log_decision("VALIDATION_ERROR", reason=str(e))
-            request_logger.error(f"[CrawlController] Validation error: {str(e)}", exc_info=True)
-            request_logger.log_state_change("request_pending", "request_failed", error_type="ValidationError")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "error": "Validation failed",
-                    "message": str(e),
-                    "url": url_str
-                }
-            )
-        except CrawlError as e:
-            request_logger.log_decision("CRAWL_ERROR", reason=str(e))
-            request_logger.error(f"[CrawlController] Crawl error: {str(e)}", exc_info=True)
-            request_logger.log_state_change("request_pending", "request_failed", error_type="CrawlError")
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail={
-                    "error": "Crawl failed",
-                    "message": str(e),
-                    "url": url_str
-                }
-            )
-        except StorageError as e:
-            request_logger.log_decision("STORAGE_ERROR", reason=str(e))
-            request_logger.error(f"[CrawlController] Storage error: {str(e)}", exc_info=True)
-            request_logger.log_state_change("request_pending", "request_failed", error_type="StorageError")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail={
-                    "error": "Storage failed",
-                    "message": str(e),
-                    "url": url_str
-                }
-            )
-        except Exception as e:
-            request_logger.log_decision("UNEXPECTED_ERROR", reason=str(e))
-            request_logger.exception(f"[CrawlController] Unexpected error during crawl: {str(e)}")
-            request_logger.log_state_change("request_pending", "request_failed", error_type="Exception")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail={
-                    "error": "Internal server error",
-                    "message": "An unexpected error occurred",
-                    "url": url_str
-                }
-            )
-
-
-class BatchCrawlResponse(BaseModel):
-    """Response model for batch crawl endpoint."""
-    success: bool = Field(
-        ...,
-        description="Whether the crawl was successful",
-        examples=[True, False]
-    )
-    documents_count: int = Field(
-        ...,
-        description="Number of documents crawled",
-        examples=[1, 10, 50]
-    )
-    document_ids: list[str] = Field(
-        default_factory=list,
-        description="List of document IDs for crawled documents",
-        examples=[["doc1", "doc2", "doc3"]]
-    )
-    start_url: str = Field(
-        ...,
-        description="Starting URL",
-        examples=["https://example.com"]
-    )
-    message: str = Field(
-        ...,
-        description="Response message",
-        examples=["Batch crawl completed successfully", "Batch crawl failed"]
-    )
-    warnings: list[str] = Field(
-        default_factory=list,
-        description="Any warnings encountered during the crawl process",
-        examples=[[], ["Some URLs failed to crawl"]]
-    )
+        except (ValidationError, CrawlError, StorageError, Exception) as e:
+            raise _handle_crawl_exception(e, url_str, request_logger)
 
 
 @router.post(
@@ -523,85 +370,26 @@ class BatchCrawlResponse(BaseModel):
     }
     
     """)
-async def crawl_batch(request: ClientBatchCrawlRequest) -> BatchCrawlResponse:
+async def crawl_batch(request: ClientCrawlRequest) -> BatchCrawlResponse:
     """Simplified batch crawl endpoint - intent-based configuration."""
     url_str = str(request.url)
     request_logger = logger.with_url(url_str)
     
     with request_logger.component_flow("crawl_batch", url=url_str):
-        warnings = []
-        
         try:
             # Get orchestrator
             orchestrator = get_orchestrator()
             
             # Resolve client intent to internal config
-            base_config = MainConfig.model_validate(orchestrator.config)
-            resolver = CrawlPolicyResolver(base_config)
-            
-            # Convert ClientBatchCrawlRequest to ClientCrawlRequest for resolver
-            client_request = ClientCrawlRequest(
-                url=request.url,
-                max_pages=request.max_pages,
-                max_depth=request.max_depth,
-                strategy=request.strategy,
-                render_js=request.render_js,
-                extract=request.extract,
-                selectors=request.selectors,
-                allowed_domains=request.allowed_domains,
-                exclude_patterns=request.exclude_patterns,
-                auth=request.auth,
-                enable_chunking=request.enable_chunking
-            )
-            
-            # Log client request strategy
-            request_logger.info(f"[CrawlController] Client requested strategy: {request.strategy}")
-            
-            # Get base config strategy for comparison
-            base_strategy = base_config.strategy.type if hasattr(base_config, 'strategy') else 'unknown'
-            request_logger.info(f"[CrawlController] Base config strategy: {base_strategy}")
-            
-            internal_config = await resolver.resolve(client_request)
-            
-            # Convert MainConfig to dict and handle chunking
-            config_dict = internal_config.model_dump()
-            
-            # Verify strategy was set correctly
-            final_strategy = config_dict.get('strategy', {}).get('type', 'unknown')
-            request_logger.info(f"[CrawlController] Final resolved strategy: {final_strategy}")
-            
-            if request.strategy != "auto" and final_strategy != request.strategy:
-                request_logger.warning(
-                    f"[CrawlController] Strategy mismatch! Client requested: {request.strategy}, "
-                    f"but resolved to: {final_strategy}"
-                )
-            
-            # Handle chunking (not in MainConfig schema)
-            if request.enable_chunking:
-                chunking_config = orchestrator.config.get('chunking', {})
-                chunking_config['enabled'] = True
-                config_dict['chunking'] = chunking_config
+            config_dict = await _resolve_request_config(request, orchestrator, request_logger)
             
             # Use isolated config context
-            original_config = copy.deepcopy(orchestrator.config)
-            orchestrator.config = config_dict
-            orchestrator._reinitialize_components()
-            
-            try:
+            with isolated_config(orchestrator, config_dict):
                 # Perform crawl
                 crawl_run = await orchestrator.crawl_with_strategy_unified(url_str)
                 
                 # Query document IDs from storage
-                document_ids = []
-                try:
-                    # Query source pages by crawl_run_id
-                    if hasattr(orchestrator.storage, 'source_pages_collection') and orchestrator.storage.source_pages_collection:
-                        source_pages = list(orchestrator.storage.source_pages_collection.find(
-                            {'crawl_run_id': crawl_run.crawl_run_id}
-                        ))
-                        document_ids = [str(sp.get('_id', sp.get('source_page_id', ''))) for sp in source_pages]
-                except Exception as e:
-                    request_logger.warning(f"Could not fetch document IDs: {e}")
+                document_ids = _get_document_ids(orchestrator, crawl_run.crawl_run_id)
                 
                 response = BatchCrawlResponse(
                     success=True,
@@ -609,43 +397,10 @@ async def crawl_batch(request: ClientBatchCrawlRequest) -> BatchCrawlResponse:
                     document_ids=document_ids,
                     start_url=url_str,
                     message=f"Crawl completed successfully. Crawled {crawl_run.total_pages_crawled} documents.",
-                    warnings=warnings
+                    warnings=[]
                 )
                 return response
             
-            finally:
-                # Restore config
-                orchestrator.config = original_config
-                orchestrator._reinitialize_components()
-            
-        except ValidationError as e:
-            request_logger.error(f"Validation error: {str(e)}", exc_info=True)
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "error": "Validation failed",
-                    "message": str(e),
-                    "url": url_str
-                }
-            )
-        except CrawlError as e:
-            request_logger.error(f"Crawl error: {str(e)}", exc_info=True)
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail={
-                    "error": "Crawl failed",
-                    "message": str(e),
-                    "url": url_str
-                }
-            )
-        except Exception as e:
-            request_logger.exception(f"Unexpected error: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail={
-                    "error": "Internal server error",
-                    "message": "An unexpected error occurred",
-                    "url": url_str
-                }
-            )
+        except (ValidationError, CrawlError, StorageError, Exception) as e:
+            raise _handle_crawl_exception(e, url_str, request_logger)
 

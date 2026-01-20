@@ -22,6 +22,7 @@ class CrawlerConfig(BaseModel):
     allowed_domains: Optional[List[str]] = Field(default=None, description="List of allowed domains (None = all allowed)")
     blocked_domains: Optional[List[str]] = Field(default=None, description="List of blocked domains")
     exclude_patterns: List[str] = Field(default_factory=list, description="URL patterns to exclude from crawling")
+    user_agent: Optional[str] = Field(default="CrawlerBot", description="User agent string for robots.txt and requests")
     
     model_config = {"frozen": True}
 
@@ -104,41 +105,6 @@ class StrategyConfig(BaseModel):
     model_config = {"frozen": True}
 
 
-class AuthConfig(BaseModel):
-    """Authentication settings configuration."""
-    headers: Dict[str, str] = Field(
-        default_factory=dict,
-        description="Custom HTTP headers"
-    )
-    cookies: Dict[str, str] = Field(
-        default_factory=dict,
-        description="HTTP cookies"
-    )
-    proxies: List[str] = Field(
-        default_factory=list,
-        description="List of proxy URLs"
-    )
-    user_agent: Optional[str] = Field(
-        default=None,
-        description="Custom user agent string"
-    )
-    basic_auth: Optional[Dict[str, str]] = Field(
-        default=None,
-        description="Basic authentication credentials (username, password)"
-    )
-    
-    @field_validator("basic_auth")
-    @classmethod
-    def validate_basic_auth(cls, v):
-        """Validate basic auth has required keys."""
-        if v is not None:
-            if "username" not in v or "password" not in v:
-                raise ValueError("basic_auth must contain 'username' and 'password'")
-        return v
-    
-    model_config = {"frozen": True}
-
-
 class LoggingConfig(BaseModel):
     """Logging settings configuration."""
     level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
@@ -165,7 +131,6 @@ class MainConfig(BaseModel):
     storage: StorageConfig = Field(default_factory=StorageConfig)
     extraction: ExtractionConfig = Field(default_factory=ExtractionConfig)
     strategy: StrategyConfig = Field(default_factory=StrategyConfig)
-    auth: AuthConfig = Field(default_factory=AuthConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     
     # Optional client identifier for multi-tenant support

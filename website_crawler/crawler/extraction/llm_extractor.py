@@ -145,10 +145,18 @@ class LLMExtractor(BaseExtractor):
             result = strategy.extract(html_content)
             
             if result and isinstance(result, dict):
+                # Fallback to HTMLParser for images if not in LLM result
+                images = result.get('images', [])
+                if not images:
+                    # Extract images using HTMLParser
+                    parsed_data = self.html_parser.parse(html_content, url)
+                    images = parsed_data.get('images', [])
+                
                 return {
                     'text': result.get('content', ''),
                     'title': result.get('title'),
                     'links': result.get('links', []),
+                    'images': images,
                     'metadata': result.get('metadata', {}),
                     'confidence': result.get('confidence', 1.0)
                 }
@@ -168,6 +176,7 @@ class LLMExtractor(BaseExtractor):
             'text': '',
             'title': None,
             'links': [],
+            'images': [],
             'metadata': {},
             'confidence': 0.0
         }

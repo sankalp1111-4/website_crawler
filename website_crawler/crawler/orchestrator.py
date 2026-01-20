@@ -75,14 +75,13 @@ class CrawlOrchestrator:
         # Initialize markdown converter (Phase 3)
         self.markdown_converter = MarkdownConverter(config.get('extraction', {}))
         
-        # Initialize auth config (needed for URL filter and strategy)
-        auth_config = config.get('auth', {})
+        # Initialize crawler config (needed for URL filter and strategy)
         crawler_config = config.get('crawler', {})
         
         # Initialize URL filter from config (needed before strategy creation)
         self.url_filter = URLFilter(
             respect_robots_txt=crawler_config.get('respect_robots_txt', True),
-            user_agent=auth_config.get('user_agent', 'CrawlerBot'),
+            user_agent=crawler_config.get('user_agent', 'CrawlerBot'),
             allowed_domains=crawler_config.get('allowed_domains'),
             blocked_domains=crawler_config.get('blocked_domains'),
             exclude_patterns=crawler_config.get('exclude_patterns', []),
@@ -110,7 +109,7 @@ class CrawlOrchestrator:
             'config': {
                 'filter_settings': {
                     'respect_robots_txt': crawler_config.get('respect_robots_txt', True),
-                    'user_agent': auth_config.get('user_agent', 'CrawlerBot'),
+                    'user_agent': crawler_config.get('user_agent', 'CrawlerBot'),
                     'allowed_domains': crawler_config.get('allowed_domains'),
                     'blocked_domains': crawler_config.get('blocked_domains'),
                     'exclude_patterns': crawler_config.get('exclude_patterns', []),
@@ -249,11 +248,10 @@ class CrawlOrchestrator:
         self.markdown_converter = MarkdownConverter(self.config.get('extraction', {}))
         
         # Re-initialize URL filter
-        auth_config = self.config.get('auth', {})
         crawler_config = self.config.get('crawler', {})
         self.url_filter = URLFilter(
             respect_robots_txt=crawler_config.get('respect_robots_txt', True),
-            user_agent=auth_config.get('user_agent', 'CrawlerBot'),
+            user_agent=crawler_config.get('user_agent', 'CrawlerBot'),
             allowed_domains=crawler_config.get('allowed_domains'),
             blocked_domains=crawler_config.get('blocked_domains'),
             exclude_patterns=crawler_config.get('exclude_patterns', []),
@@ -279,7 +277,7 @@ class CrawlOrchestrator:
             'config': {
                 'filter_settings': {
                     'respect_robots_txt': crawler_config.get('respect_robots_txt', True),
-                    'user_agent': auth_config.get('user_agent', 'CrawlerBot'),
+                    'user_agent': crawler_config.get('user_agent', 'CrawlerBot'),
                     'allowed_domains': crawler_config.get('allowed_domains'),
                     'blocked_domains': crawler_config.get('blocked_domains'),
                     'exclude_patterns': crawler_config.get('exclude_patterns', []),
@@ -420,10 +418,9 @@ class CrawlOrchestrator:
                 
                 # Step 2.5: Check URL filter
                 crawler_config = self.config.get('crawler', {})
-                auth_config = self.config.get('auth', {})
                 filter_settings = {
                     'respect_robots_txt': crawler_config.get('respect_robots_txt', True),
-                    'user_agent': auth_config.get('user_agent', 'CrawlerBot'),
+                    'user_agent': crawler_config.get('user_agent', 'CrawlerBot'),
                     'allowed_domains': crawler_config.get('allowed_domains'),
                     'blocked_domains': crawler_config.get('blocked_domains'),
                     'exclude_patterns': crawler_config.get('exclude_patterns', []),
@@ -528,6 +525,7 @@ class CrawlOrchestrator:
                     raw_html=raw_page.html,
                     markdown=markdown_content,  # Phase 3: Add markdown support
                     links=extracted.get('links', []),
+                    images=extracted.get('images', []),
                     metadata={
                         **extracted.get('metadata', {}),
                         'status_code': raw_page.status_code,
@@ -737,10 +735,9 @@ class CrawlOrchestrator:
                 
                 # Step 3: Check URL filter
                 crawler_config = self.config.get('crawler', {})
-                auth_config = self.config.get('auth', {})
                 filter_settings = {
                     'respect_robots_txt': crawler_config.get('respect_robots_txt', True),
-                    'user_agent': auth_config.get('user_agent', 'CrawlerBot'),
+                    'user_agent': crawler_config.get('user_agent', 'CrawlerBot'),
                     'allowed_domains': crawler_config.get('allowed_domains'),
                     'blocked_domains': crawler_config.get('blocked_domains'),
                     'exclude_patterns': crawler_config.get('exclude_patterns', []),
@@ -838,7 +835,8 @@ class CrawlOrchestrator:
                             'crawl_timestamp': raw_page.crawl_timestamp.isoformat(),
                             'headers': raw_page.headers,
                             'extractor_type': self.config.get('extraction', {}).get('type', 'simple'),
-                            'links': extracted.get('links', [])
+                            'links': extracted.get('links', []),
+                            'images': extracted.get('images', [])
                         },
                         crawl_run_id=crawl_run_id
                     )
@@ -860,7 +858,8 @@ class CrawlOrchestrator:
                             'crawl_timestamp': raw_page.crawl_timestamp.isoformat(),
                             'headers': raw_page.headers,
                             'extractor_type': self.config.get('extraction', {}).get('type', 'simple'),
-                            'links': extracted.get('links', [])
+                            'links': extracted.get('links', []),
+                            'images': extracted.get('images', [])
                         },
                         crawl_run_id=crawl_run_id or existing_source_page.crawl_run_id
                     )

@@ -12,7 +12,6 @@ from .schema import (
     StorageConfig,
     ExtractionConfig,
     StrategyConfig,
-    AuthConfig,
     LoggingConfig,
 )
 from .loader import (
@@ -29,7 +28,6 @@ __all__ = [
     "StorageConfig",
     "ExtractionConfig",
     "StrategyConfig",
-    "AuthConfig",
     "LoggingConfig",
     # Loader functions
     "load_config",
